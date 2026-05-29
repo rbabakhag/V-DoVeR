@@ -1,6 +1,6 @@
 close all; clear; clc;
-% keyboard
-% Specify directory where all data is stored
+
+%% Specify directory where all data is stored
 basepath = pwd;
 dataDir = fullfile(basepath,'analysis','synthetic.carotid');
 addpath(basepath,'src','export_fig');
@@ -25,9 +25,15 @@ temp = load(fullfile(matDir,matInfo(2).name));
 dx_CFI  = abs((temp.x_axis_B(2)-temp.x_axis_B(1)));
 y_axis_CFI = min(temp.r_axis_B):dx_CFI:max(temp.r_axis_B);
 clear temp;
+plotdir  = fullfile(basepath,'results_2','images','synthetic.carotid');
+if ~exist(plotdir,'dir')
+    mkdir(plotdir)
+end 
 
-% Set time points for each frame sample
-frRng = 3;%3:16:190;
+%% Set time points for each frame sample
+frRng = 3:16:190;
+% frRng = 5:30:50;
+
 vCFI  = [];
 for n = 1:numel(frRng)
     fprintf('Evaluating frame %03i of %03i ... \r',n,numel(frRng));
@@ -47,10 +53,10 @@ for n = 1:numel(frRng)
     if n == 2
         bw = CFI;
         bw(bw == 0)  = inf;
-        bw(bw < 12)   = 1; %%% why 12?
+        bw(bw < 12)   = 1;
         bw(bw >= 12)  = 0;
         bw  = imdilate(bwselect(imerode(bw,strel('disk',1)),130,530),strel('disk',1));
-        CFI = CFI + bw*60; %%%Why 130 and 530? %%%why multiplied by 60
+        CFI = CFI + bw*60;
     end
     % Second step, we interpolate to an isotropic resolution
     [xCFI,yCFI] = meshgrid(temp.x_axis_B,y_axis_CFI);
@@ -62,7 +68,7 @@ count   =   1;
 % Pre-allocate memory for CFD u & v velocities
 ucfd    =   [];
 vcfd    =   [];
-for n = 5%3:16:190
+for n = 1:190%3:16:190
     fprintf('Evaluating frame %03i of 200 ... \r',n);
     % Using fscanf, load in each frame, interpolate the pressure data
     FID         = fopen(fullfile(rawDir,rawInfo(n).name));
@@ -70,12 +76,12 @@ for n = 5%3:16:190
     fclose(FID);
     rawdata     = datacell{1,1};
     % Rotate points around Z-axis
-    theta   = -pi/9;    %%%Why?
+    theta   = -pi/9;
     rotMat  = [cos(theta) -sin(theta) 0; sin(theta) cos(theta) 0; 0 0 1];
     rotdata(:,1)    = rawdata(:,1);
     rotdata(:,2:4)  = (rotMat*rawdata(:,2:4)')'*100;
     rotdata(:,5:7)  = (rotMat*rawdata(:,5:7)')'*100;
-    rotdata(:,3)    = rotdata(:,3)+2;   %%%why?
+    rotdata(:,3)    = rotdata(:,3)+2;
     % Interpolate x-velocity & y-velocity on CFI grid (2D)
     UF      =   scatteredInterpolant(rotdata(:,2),rotdata(:,3),rotdata(:,4),...
         rotdata(:,5),'linear','none');
@@ -89,10 +95,10 @@ for n = 5%3:16:190
     vcfd    =   cat(3,vcfd,-VCFD/100);
     count = count + 1;
 end
-
+keyboard
 % Create a line vector, from which we will zero out values
 % (This was done by hand to try and find the normal vector to the vessel)
-yTrunc = 1:120; %%%what is this ytrunc
+yTrunc = 1:120;
 xTrunc = round(yTrunc*0.3478 + (104.9565));
 % Make sure velocities, axes, and scales are set to cm
 X   = xCFI/100;
@@ -111,7 +117,7 @@ end
 bcmask = zeros(size(ucfd));
 % build boundary mask points
 for n = 1:numel(frRng)
-    bcMask = mask(:,:,n)*7;     %why 7?
+    bcMask = mask(:,:,n)*7;
     % Compute zero-crossings, label all as 1
     bnds    = cell2mat(bwboundaries(logical(mask(:,:,n))));
     inds    = sub2ind([size(mask,1) size(mask,2)],bnds(:,1),bnds(:,2));
@@ -123,7 +129,7 @@ for n = 1:numel(frRng)
     inds = find(bcMask(:,end) == 5);
     bcMask(inds(1)-1:inds(end)+1,end) = 3;
     % find bottom wall points, label as 2
-    [r,c] = find(bcMask(151:end,:) == 5);   %%%Why 151?
+    [r,c] = find(bcMask(151:end,:) == 5);
     inds  = sub2ind([size(mask,1) size(mask,2)],r+150,c);
     bcMask(inds)    = 2;
     % find bifurcation wall points, label as 4
@@ -178,7 +184,7 @@ fsigm = @(param,xval) param(1)+(param(2)-param(1))./(1+10.^((param(3)-xval)*para
 psiBC       =   zeros(size(bcmask));
 uPholder    =   zeros(size(bcmask));
 temp.Uvfm   =   zeros(size(bcmask));
-% Compute boundary conditions                               %%% Last Read
+%% Compute boundary conditions
 for n = 1:numel(frRng)
     % Store current boundary conditions
     psibc       = bcmask(:,:,n);
@@ -195,6 +201,7 @@ for n = 1:numel(frRng)
     psibc(psibc == 2) = psivectin(end);
     % Interna will have 65% of mass flux outflowing
     % Start by making it a plug boundary
+%     keyboard
     [inds,~] = find(psibc == 3);
     maxpsi  = psivectin(end);
     tempVals    = (inds-mean(inds))*dx;
@@ -255,7 +262,7 @@ uivfm       =   zeros(size(bcmask));
 vivfm       =   zeros(size(bcmask));
 wivfm       =   zeros(size(bcmask));
 
-% Do vector field reconstruction
+%% Do vector field reconstruction
 for n = 1:numel(frRng)
     % Run median filter on data to reject any outlier vectors
     bwmask  = bwMask(:,:,n); 
@@ -275,15 +282,12 @@ for n = 1:numel(frRng)
     % Compute vorticity on smoothed data
     omegaInit(:,:,n) = -2*dvdx;
     
-    % Run DoVeR on carotid data
-    %%%Reza
-    % [ucdev(:,:,n),vcdev(:,:,n),psi(:,:,n),omegapsi(:,:,n)] =...
-    %     cdev_cartesian_reza(uPholder(:,:,n).*mask(:,:,n),-vdover.*mask(:,:,n),dx,dx,...
-    %     omegaInit(:,:,n),psiBC(:,:,n),bcmask(:,:,n),0.15*max(abs(-vdover(vdover~=0))),'LU');
-     [ucdev(:,:,n),vcdev(:,:,n),psi(:,:,n),omegapsi(:,:,n)] =...
-        cdev_cartesian_Org(uPholder(:,:,n).*mask(:,:,n),-vdover.*mask(:,:,n),dx,dx,...
-        omegaInit(:,:,n),psiBC(:,:,n),bcmask(:,:,n),0.15*max(abs(-vdover(vdover~=0))),'LU');
-   
+    %%%%%%%%%%%    DoVeR on carotid data   %%%%%%%%%%%%%%%%%%%
+    %
+    [ucdev(:,:,n),vcdev(:,:,n),psi(:,:,n),omegapsi(:,:,n)] =...
+        cdev_cartesian(uPholder(:,:,n).*mask(:,:,n),-vdover.*mask(:,:,n),dx,dx,...
+        omegaInit(:,:,n),psiBC(:,:,n),bcmask(:,:,n),0.15*max(abs(-vdover(vdover~=0))),'LU',plotdir,n);
+    
     figure(101);
     imagesc(X(1,skp:skp:end)/dx,Y(skp:skp:end,1)/dx,ucdev(:,:,n)); colorbar; caxis([-0.3 1]);
     hold on;
@@ -293,7 +297,8 @@ for n = 1:numel(frRng)
     hold off;
     axis image;
     set(gcf,'Position',[100 100 600 600]);
-    
+    %}
+
     % Construct Gaussian filter to smooth data for VFM processing
     sigma = 3;
     h1 = fspecial('gaussian',...
@@ -307,9 +312,10 @@ for n = 1:numel(frRng)
             vcfi(temp.r(nn),temp.c(nn))*cosd(-temp.anglemat(temp.r(nn),temp.c(nn),n));
     end
     
-    % Run VFM reconstruction with original formulation BCs
+    %%%%%%%%%%%%   VFM with original formulation BCs   %%%%%%%
+    %
     [uvfm(:,:,n),vvfm(:,:,n),wvfm(:,:,n)] = vector_flow_mapping(...
-        (temp.Uvfm(:,:,n)+0*uPholder(:,:,n)).*mask(:,:,n),vcfi,dx,dx,dvdy,mask(:,:,n));
+        (temp.Uvfm(:,:,n)+0*uPholder(:,:,n)).*mask(:,:,n),vcfi,dx,dx,dvdy,mask(:,:,n),plotdir,n);
     
     figure(102);
     imagesc(X(1,skp:skp:end)/dx,Y(skp:skp:end,1)/dx,uvfm(:,:,n)); colorbar; caxis([-0.3 1]);
@@ -321,8 +327,9 @@ for n = 1:numel(frRng)
     axis image;
     set(gcf,'Position',[700 100 600 600]);
     pause(1E-5);
-    
-    % Run VFM reconstruction with DoVeR formulation BCs
+    %}
+    %%%%%%%%%%%%%%VFM reconstruction with DoVeR formulation BCs%%%%%%%%%
+    %{
     [uvfm1(:,:,n),vvfm1(:,:,n),wvfm1(:,:,n)] = vector_flow_mapping(...
         (1*temp.Uvfm(:,:,n)+0*uPholder(:,:,n)).*mask(:,:,n),-vcfi,dx,dx,dvdy,mask(:,:,n));
     
@@ -336,27 +343,45 @@ for n = 1:numel(frRng)
     axis image;
     set(gcf,'Position',[700 100 600 600]);
     pause(1E-5);
-    %%%ReZA
-    % % Run iVFM reconstruction (method that uses least squares)
-    % [u,v] = ivfm(flip((temp.Uvfm(:,:,n)+uPholder(:,:,n)).*mask(:,:,n),1),flip(-vcfi.*mask(:,:,n),1),...
-    %     x,y,XRT,YRT,RXY,TXY,RHO,THETA,dr,dth);
-    %New iVFM code
-    ang             = -15;
-    [uivfm(:,:,n),vivfm(:,:,n)] = ivfm_cartesian_reza_v05(...
-    (temp.Uvfm(:,:,n)+0*uPholder(:,:,n)).*bwmask(:,:,n),-vcfi,X,Y,dx,dx,bwmask(:,:,n),ang);
-
-    % uivfm2(:,:,n) = flip(u,1);
-    % vivfm2(:,:,n) = flip(v,1);
+    %}
+    %%%%%%%%%%%%iVFM reconstruction (method that uses least squares)%%%%%
+    %{
+    [u,v] = ivfm(flip((temp.Uvfm(:,:,n)+uPholder(:,:,n)).*mask(:,:,n),1),flip(-vcfi.*mask(:,:,n),1),...
+        x,y,XRT,YRT,RXY,TXY,RHO,THETA,dr,dth);
+    uivfm(:,:,n) = flip(u,1);
+    vivfm(:,:,n) = flip(v,1);
     wivfm(:,:,n) = socdiff_bc(vivfm(:,:,n),dx,2,mask(:,:,n)) -...
         socdiff_bc(uivfm(:,:,n),dx,1,mask(:,:,n)) ;
     
- end
+    figure(103);
+    imagesc(X(1,skp:skp:end)/dx,Y(skp:skp:end,1)/dx,uivfm(:,:,n)); colorbar; caxis([-0.3 1]);
+    hold on;
+    quiver(X(skp:skp:end,skp:skp:end)/dx,Y(skp:skp:end,skp:skp:end)/dx,...
+        (uivfm(skp:skp:end,skp:skp:end,n))*30,...
+        (vivfm(skp:skp:end,skp:skp:end,n))*30,'y','autoscale','off');
+    hold off;
+    axis image;
+    set(gcf,'Position',[700 100 600 600]);
+    pause(1E-5);
+    %}
+    %%%%%%%%%%%%iVFM reconstruction %%%%%
+    [uivfm(:,:,n),vivfm(:,:,n)] = ivfm_cartesian_reza_v09(...
+    (temp.Uvfm(:,:,n)+uPholder(:,:,n)).*bwmask,-vcfi,X,Y,dx,dx,bwmask,-15,plotdir,n);
 
-% Set image output directory
-plotdir  = fullfile(basepath,'results','images','synthetic.carotid');
-if ~exist(plotdir,'dir')
-    mkdir(plotdir)
-end 
+    figure('Name','Run new iVFM reconstruction');
+    imagesc(X(1,skp:skp:end)/dx,Y(skp:skp:end,1)/dx,uivfm(:,:,n)); colorbar; %caxis([-0.3 1]);
+    hold on;
+    quiver(X(skp:skp:end,skp:skp:end)/dx,Y(skp:skp:end,skp:skp:end)/dx,...
+        (uivfm(skp:skp:end,skp:skp:end,n))*30,...
+        -(vivfm(skp:skp:end,skp:skp:end,n))*30,'y');
+    hold off;
+    axis image;
+    set(gcf,'Position',[700 100 600 600]);
+    pause(1E-5);
+
+end
+% keyboard
+%% Set image output directory
 % CFD GROUND TRUTH
 calCFD      =   zeros(size(vcdev));
 omegaCFD    =   zeros(size(vcdev));
@@ -395,8 +420,8 @@ rbmap   = colormap(redblue(40));
 % Center plot grids about 0
 xp  =   X - mean(X(:));
 yp  =   Y - mean(Y(:));
-keyboard
-% Plot the reconstrction results for each method
+
+%% Plot the reconstrction results for each method
 for nn = 1:numel(frRng)
     figure(1);
     toCFD = omegaCFD(:,:,nn).*mask(:,:,nn); toCFD(toCFD == 0) = nan;
@@ -599,7 +624,7 @@ for tt = 1:size(ucfd,3)
     UiVFM(:,:,tt)   = sqrt(uivfm(:,:,tt).^2+vivfm(:,:,tt).^2).*imerode(mask(:,:,tt),strel('disk',1));
 end
 
-% Construct the elements for a Bland-Altman or Tukey plot
+%% Construct the elements for a Bland-Altman or Tukey plot
 label1 = 'DoVeR'; label2 = 'CFD';
 threshold = quantile(abs(UCFD(abs(UCFD) > 0)),0.01);
 sclv = (max(UCFD(:))-min(UCFD(:)));
@@ -625,7 +650,7 @@ stdiVFM     = std((UCFD(abs(UCFD)>threshold)-...
 meaniVFM    = mean((UCFD(abs(UCFD)>threshold)-...
     UiVFM(abs(UCFD)>threshold))/sclv*100);
 
-% Display the Bland-Altman plot
+%% Display the Bland-Altman plot
 figure(21);
 scatter(meanMeanVFM(1),meanDiffVFM(1),20,'filled',...
     'MarkerFaceColor',[0.4660, 0.6740, 0.1880],'MarkerEdgeColor','none',...
